@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/theme_extensions.dart';
+import 'artwork.dart';
 import 'skeleton.dart';
 
 class RecipeImage extends StatefulWidget {
@@ -12,6 +13,7 @@ class RecipeImage extends StatefulWidget {
     this.fit = BoxFit.cover,
     this.onSettled,
     this.cacheWidth,
+    this.artSeed,
   });
 
   final String? imageUrl;
@@ -19,6 +21,9 @@ class RecipeImage extends StatefulWidget {
   final BoxFit fit;
   final VoidCallback? onSettled;
   final int? cacheWidth;
+
+  /// Seed for the generated dish artwork used when no photo is available.
+  final String? artSeed;
 
   @override
   State<RecipeImage> createState() => _RecipeImageState();
@@ -55,7 +60,7 @@ class _RecipeImageState extends State<RecipeImage> {
     final Widget content;
     if (url == null || url.isEmpty) {
       _settle();
-      content = const _ImageUnavailable();
+      content = _fallback();
     } else {
       content = Image(
         image: CachedNetworkImageProvider(
@@ -90,7 +95,7 @@ class _RecipeImageState extends State<RecipeImage> {
         },
         errorBuilder: (context, error, stackTrace) {
           _settle();
-          return const _ImageUnavailable();
+          return _fallback();
         },
       );
     }
@@ -99,6 +104,16 @@ class _RecipeImageState extends State<RecipeImage> {
       borderRadius: BorderRadius.circular(widget.borderRadius),
       child: SizedBox.expand(child: content),
     );
+  }
+
+  /// A photo is missing or failed to load: show the generated dish artwork
+  /// instead of an error card, so a recipe never renders as broken.
+  Widget _fallback() {
+    final seed = widget.artSeed;
+    if (seed != null && seed.isNotEmpty) {
+      return DishArtwork(seed: seed, radius: widget.borderRadius);
+    }
+    return const _ImageUnavailable();
   }
 }
 

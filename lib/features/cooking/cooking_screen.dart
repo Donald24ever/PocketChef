@@ -239,6 +239,7 @@ class _CookingScreenState extends ConsumerState<CookingScreen> {
                             imageUrl: recipe.imageUrl,
                             borderRadius: 22,
                             cacheWidth: 240,
+                            artSeed: recipe.artSeed,
                           ),
                         ),
                       ],

@@ -14,6 +14,7 @@ import '../../data/models/user.dart';
 import '../../state/app_state_provider.dart';
 import '../../state/domain_providers.dart';
 import '../recipes/widgets/recipe_widgets.dart';
+import 'home_collections.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -24,10 +25,6 @@ class HomeScreen extends ConsumerWidget {
     if (hour < 17) return 'Good afternoon';
     return 'Good evening';
   }
-
-  int _matchCount(Recipe recipe, Set<String> pantry) => recipe.ingredients
-      .where((i) => pantry.contains(i.name.toLowerCase()))
-      .length;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -41,34 +38,11 @@ class HomeScreen extends ConsumerWidget {
     );
 
     final repo = ref.watch(recipeRepositoryProvider);
-    final recipes = [...repo.all()]
-      ..sort((a, b) {
-        final byMatch =
-            _matchCount(b, pantryNames) - _matchCount(a, pantryNames);
-        if (byMatch != 0) return byMatch;
-        return a.minutes.compareTo(b.minutes);
-      });
-    final shortlist = recipes.take(4).toList(growable: false);
+    final all = repo.all();
+    final shelves = buildHomeCollections(recipes: all, pantry: pantryNames);
     final firstName = profile.name.trim().split(' ').first;
 
-    final allNigerian = recipes
-        .where((r) => r.isNigerian)
-        .toList(growable: false);
-    final popularNigerian = [...allNigerian]
-      ..sort((a, b) => b.ratingCount.compareTo(a.ratingCount));
-    final quickNigerian = allNigerian.where((r) => r.minutes <= 45).toList()
-      ..sort((a, b) => a.minutes.compareTo(b.minutes));
-    final healthyNigerian =
-        allNigerian.where((r) => r.calories <= 480).toList(growable: false)
-          ..sort((a, b) => a.calories.compareTo(b.calories));
-    final weekend = [
-      'jollof-rice',
-      'fried-rice',
-      'ofada-rice-ayamase',
-      'pounded-yam',
-      'banga-soup',
-      'oha-soup',
-    ].map(repo.byId).whereType<Recipe>().toList(growable: false);
+    final allNigerian = all.where((r) => r.isNigerian).toList(growable: false);
     final regionCounts = <String, int>{};
     for (final recipe in allNigerian) {
       final region = recipe.heritage?.region;
@@ -233,18 +207,18 @@ class HomeScreen extends ConsumerWidget {
                 onAction: () => context.go('/recipes'),
               ),
             ),
-            if (shortlist.isNotEmpty) ...[
+            if (shelves.shortlist.isNotEmpty) ...[
               SliverToBoxAdapter(
                 child: FeatureRecipeCard(
-                  recipe: shortlist.first,
+                  recipe: shelves.shortlist.first,
                   eyebrow: 'BEST MATCH FOR YOUR KITCHEN',
                 ),
               ),
               SliverList.separated(
-                itemCount: shortlist.length - 1,
+                itemCount: shelves.shortlist.length - 1,
                 separatorBuilder: (_, _) => const SizedBox(height: 4),
                 itemBuilder: (context, index) =>
-                    RecipeRow(recipe: shortlist[index + 1]),
+                    RecipeRow(recipe: shelves.shortlist[index + 1]),
               ),
             ],
             SliverToBoxAdapter(
@@ -267,8 +241,11 @@ class HomeScreen extends ConsumerWidget {
                     Haptics.light();
                     context.push('/nigerian');
                   },
-                  imageUrl: popularNigerian.isNotEmpty
-                      ? popularNigerian.first.imageUrl
+                  imageUrl: shelves.popularNigerian.isNotEmpty
+                      ? shelves.popularNigerian.first.imageUrl
+                      : null,
+                  artSeed: shelves.popularNigerian.isNotEmpty
+                      ? shelves.popularNigerian.first.artSeed
                       : null,
                 ),
               ),
@@ -277,7 +254,7 @@ class HomeScreen extends ConsumerWidget {
               child: _RecipeShelf(
                 title: 'Popular Nigerian meals',
                 subtitle: 'The dishes Nigerians argue over — lovingly',
-                recipes: popularNigerian.take(6).toList(growable: false),
+                recipes: shelves.popularNigerian,
                 onAction: () {
                   Haptics.light();
                   context.push('/nigerian');
@@ -288,7 +265,7 @@ class HomeScreen extends ConsumerWidget {
               child: _RecipeShelf(
                 title: 'Quick Nigerian dishes',
                 subtitle: 'Under 45 minutes, maximum flavour',
-                recipes: quickNigerian.take(6).toList(growable: false),
+                recipes: shelves.quickNigerian,
                 onAction: () {
                   Haptics.light();
                   context.push('/nigerian');
@@ -299,7 +276,7 @@ class HomeScreen extends ConsumerWidget {
               child: _RecipeShelf(
                 title: 'Healthy Nigerian recipes',
                 subtitle: 'Lighter bowls, the same soul',
-                recipes: healthyNigerian.take(6).toList(growable: false),
+                recipes: shelves.healthyNigerian,
                 onAction: () {
                   Haptics.light();
                   context.push('/nigerian');
@@ -335,19 +312,19 @@ class HomeScreen extends ConsumerWidget {
                 },
               ),
             ),
-            if (weekend.isNotEmpty) ...[
+            if (shelves.weekend.isNotEmpty) ...[
               SliverToBoxAdapter(
                 child: FeatureRecipeCard(
-                  recipe: weekend.first,
+                  recipe: shelves.weekend.first,
                   eyebrow: 'WEEKEND FAMILY MEAL',
                 ),
               ),
-              if (weekend.length > 1)
+              if (shelves.weekend.length > 1)
                 SliverList.separated(
-                  itemCount: weekend.length - 1,
+                  itemCount: shelves.weekend.length - 1,
                   separatorBuilder: (_, _) => const SizedBox(height: 4),
                   itemBuilder: (context, index) =>
-                      RecipeRow(recipe: weekend[index + 1]),
+                      RecipeRow(recipe: shelves.weekend[index + 1]),
                 ),
             ],
             const SliverToBoxAdapter(child: SizedBox(height: 32)),
@@ -650,10 +627,15 @@ class _PlanBanner extends StatelessWidget {
 }
 
 class _NigerianHero extends StatelessWidget {
-  const _NigerianHero({required this.onTap, required this.imageUrl});
+  const _NigerianHero({
+    required this.onTap,
+    required this.imageUrl,
+    this.artSeed,
+  });
 
   final VoidCallback onTap;
   final String? imageUrl;
+  final String? artSeed;
 
   @override
   Widget build(BuildContext context) {
@@ -667,7 +649,7 @@ class _NigerianHero extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              RecipeImage(imageUrl: imageUrl, borderRadius: 0),
+              RecipeImage(imageUrl: imageUrl, borderRadius: 0, artSeed: artSeed),
               DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(

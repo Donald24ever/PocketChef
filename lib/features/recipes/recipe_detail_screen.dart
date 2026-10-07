@@ -74,6 +74,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
                     width: double.infinity,
                     child: RecipeImage(
                       imageUrl: recipe.imageUrl,
+                      artSeed: recipe.artSeed,
                       borderRadius: 0,
                       onSettled: () {
                         if (mounted && !_heroReady) {

@@ -93,7 +93,11 @@ class RecipeRow extends StatelessWidget {
             SizedBox(
               width: 104,
               height: 104,
-              child: RecipeImage(imageUrl: recipe.imageUrl, borderRadius: 20),
+              child: RecipeImage(
+                imageUrl: recipe.imageUrl,
+                borderRadius: 20,
+                artSeed: recipe.artSeed,
+              ),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -211,7 +215,11 @@ class FeatureRecipeCard extends StatelessWidget {
             SizedBox(
               height: 180,
               width: double.infinity,
-              child: RecipeImage(imageUrl: recipe.imageUrl, borderRadius: 0),
+              child: RecipeImage(
+                imageUrl: recipe.imageUrl,
+                borderRadius: 0,
+                artSeed: recipe.artSeed,
+              ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 8, 18),
@@ -313,7 +321,11 @@ class RecipeTile extends StatelessWidget {
             children: [
               AspectRatio(
                 aspectRatio: 1.25,
-                child: RecipeImage(imageUrl: recipe.imageUrl, borderRadius: 20),
+                child: RecipeImage(
+                imageUrl: recipe.imageUrl,
+                borderRadius: 20,
+                artSeed: recipe.artSeed,
+              ),
               ),
               Positioned(
                 top: 6,

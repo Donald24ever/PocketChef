@@ -678,13 +678,21 @@ class GeneratedRecipesNotifier extends Notifier<List<Recipe>> {
     if (added.isEmpty) return;
     state = [...added, ...state];
     _persist();
-    for (final recipe in added) {
+    _enrichMissing();
+  }
+
+  /// Looks up artwork for every recipe that still has none. Recipes restored
+  /// from disk or Firestore arrive without an image and are only enriched on
+  /// this path, so it runs after every load as well as after a fresh
+  /// generation.
+  void _enrichMissing() {
+    for (final recipe in state) {
       if (recipe.imageUrl.isEmpty) unawaited(_enrichImage(recipe));
     }
   }
 
   /// Generated recipes start without artwork; look one up on TheMealDB and
-  /// patch it in when a match exists.
+  /// Wikimedia Commons and patch it in when a match exists.
   Future<void> _enrichImage(Recipe recipe) async {
     try {
       final url = await ref.read(foodImageServiceProvider).lookup(recipe.title);
@@ -702,7 +710,10 @@ class GeneratedRecipesNotifier extends Notifier<List<Recipe>> {
   }
 
   /// Replaces the list when another account's data is loaded (or cleared).
-  void hydrate(List<Recipe> recipes) => state = recipes;
+  void hydrate(List<Recipe> recipes) {
+    state = recipes;
+    _enrichMissing();
+  }
 
   void _persist() => ref.read(userPersistenceProvider).generatedRecipes(state);
 }

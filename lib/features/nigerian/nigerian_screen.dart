@@ -132,6 +132,9 @@ class _NigerianScreenState extends ConsumerState<NigerianScreen> {
                   imageUrl: allNigerian.isNotEmpty
                       ? allNigerian.first.imageUrl
                       : null,
+                  artSeed: allNigerian.isNotEmpty
+                      ? allNigerian.first.artSeed
+                      : null,
                   onMatch: () {
                     Haptics.light();
                     if (_selected.length < 2) return;
@@ -224,11 +227,13 @@ class _NigerianHeaderHero extends StatelessWidget {
     required this.count,
     required this.onMatch,
     required this.imageUrl,
+    this.artSeed,
   });
 
   final int count;
   final VoidCallback onMatch;
   final String? imageUrl;
+  final String? artSeed;
 
   @override
   Widget build(BuildContext context) {
@@ -239,7 +244,7 @@ class _NigerianHeaderHero extends StatelessWidget {
           SizedBox(
             height: 176,
             width: double.infinity,
-            child: RecipeImage(imageUrl: imageUrl, borderRadius: 0),
+            child: RecipeImage(imageUrl: imageUrl, borderRadius: 0, artSeed: artSeed),
           ),
           Positioned.fill(
             child: DecoratedBox(
