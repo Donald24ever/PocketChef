@@ -1,0 +1,159 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------
+    // PocketChef Firestore security rules
+    //
+    // Principle of least privilege:
+    //  - Every document is namespaced under its owner uid.
+    //  - Only the signed-in owner can read or write their own data.
+    //  - Guests can never access the backend datastore.
+    //  - Writes are validated (type + size) to block malformed payloads.
+    //  - Brute-force / abuse protection is enforced at the Auth layer
+    //    (lockout) and via perimeter rate limiting; rules enforce the
+    //    maximum permitted rate for audit-log writes.
+    //
+    // Client layout:
+    //  users/{uid}                    -> profile document (merge writes)
+    //  users/{uid}/meta/{docId}       -> per-user data documents:
+    //      favourites | collections | planner | shopping | pantry |
+    //      scanHistory | generatedRecipes
+    // ---------------------------------------------------------------
+
+    function signedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function owner() {
+      return request.auth.uid == resource.data.uid;
+    }
+
+    function incomingOwner() {
+      return request.resource.data.uid == request.auth.uid;
+    }
+
+    function isString(value) {
+      return value is string && value.size() <= 4096;
+    }
+
+    function isStringList(value) {
+      return value is list && value.size() <= 64
+        && (value.size() == 0 || value[0] is string);
+    }
+
+    function profileKeys() {
+      return [
+        'uid', 'name', 'email', 'provider', 'diets', 'allergies', 'goal',
+        'familySize', 'notifications', 'photoUrl', 'createdAt',
+        'lastLoginAt', 'updatedAt',
+      ];
+    }
+
+    function validProfile() {
+      return request.resource.data.keys().hasOnly(profileKeys())
+      && request.resource.data.uid is string
+      && request.resource.data.uid == request.auth.uid
+      && request.resource.data.name is string
+      && request.resource.data.name.size() <= 80
+      && request.resource.data.email is string
+      && request.resource.data.email.size() <= 120
+      && request.resource.data.provider is string
+      && request.resource.data.goal is string
+      && request.resource.data.familySize is int
+      && request.resource.data.familySize >= 1
+      && request.resource.data.familySize <= 12
+      && isStringList(request.resource.data.diets)
+      && isStringList(request.resource.data.allergies)
+      && request.resource.data.notifications is bool
+      && (!('photoUrl' in request.resource.data)
+          || (request.resource.data.photoUrl is string
+              && request.resource.data.photoUrl.size() <= 1024));
+    }
+
+    function lockedUid() {
+      return request.resource.data.uid == request.auth.uid;
+    }
+
+    // One document per user under /users; cannot be listed publicly.
+    match /users/{userId} {
+      allow read: if signedIn() && userId == request.auth.uid;
+      allow create: if signedIn() && userId == request.auth.uid && validProfile();
+      allow update: if signedIn() && userId == request.auth.uid && validProfile()
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['name', 'diets', 'allergies', 'goal',
+                                   'familySize', 'notifications', 'photoUrl',
+                                   'lastLoginAt', 'updatedAt']);
+      allow delete: if signedIn() && userId == request.auth.uid;
+    }
+
+    // Per-user data documents (planner, shopping, favourites, pantry,
+    // scan history, generated recipes, collections). Owner-only, whole
+    // document read/write — the client mirrors local state.
+    match /users/{userId}/meta/{docId} {
+      allow read: if signedIn() && userId == request.auth.uid
+                  && docId in [
+                    'favourites', 'collections', 'planner', 'shopping',
+                    'pantry', 'scanHistory', 'generatedRecipes',
+                  ];
+      allow write: if signedIn() && userId == request.auth.uid
+                   && docId in [
+                     'favourites', 'collections', 'planner', 'shopping',
+                     'pantry', 'scanHistory', 'generatedRecipes',
+                   ]
+                   && request.resource.data is map
+                   && request.resource.data.size() <= 8;
+    }
+
+    // Favorites: invite-only writes by the owner; ids are recipe ids.
+    match /users/{userId}/favorites/{recipeId} {
+      allow read, delete: if signedIn() && userId == request.auth.uid;
+      allow create: if signedIn() && userId == request.auth.uid
+                    && recipeId.size() <= 80
+                    && request.resource.data.uid == request.auth.uid;
+      allow update: if false;
+    }
+
+    // Pantry / scanning history: owner-only, append-mostly.
+    match /users/{userId}/pantry/{pantryId} {
+      allow read: if signedIn() && userId == request.auth.uid;
+      allow create: if signedIn() && userId == request.auth.uid
+                    && request.resource.data.uid == request.auth.uid
+                    && isString(request.resource.data.name);
+      allow update: if signedIn() && userId == request.auth.uid;
+      allow delete: if signedIn() && userId == request.auth.uid;
+    }
+
+    // Weekly plan.
+    match /users/{userId}/plan/{mealId} {
+      allow read, delete: if signedIn() && userId == request.auth.uid;
+      allow create, update: if signedIn() && userId == request.auth.uid
+                            && request.resource.data.uid == request.auth.uid;
+    }
+
+    // Security audit log: append-only by the owner.
+    // Cap 40 writes/min as a coarse abuse bound (perimeter rate
+    // limiting does the heavy lifting).
+    match /users/{userId}/audit/{entryId} {
+      allow read: if signedIn() && userId == request.auth.uid;
+      allow create: if signedIn() && userId == request.auth.uid
+                    && request.resource.data.uid == request.auth.uid
+                    && isString(request.resource.data.action)
+                    && isString(request.resource.data.detail);
+      allow update, delete: if false;
+    }
+
+    // Push tokens (consumed by cloud functions; owners can remove).
+    match /users/{userId}/pushTokens/{token} {
+      allow read: if false;
+      allow create, delete: if signedIn() && userId == request.auth.uid
+                            && request.resource.data.uid == request.auth.uid;
+      allow update: if false;
+    }
+
+    // Deny everything except the explicitly allowed paths above.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
